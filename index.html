@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Botkassa">
+<meta name="theme-color" content="#FF3B30">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+<title>Botkassa</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif; -webkit-font-smoothing: antialiased; background: #f2f2f7; color: #000; }
+body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input, select { font-family: inherit; }
+input:focus, select:focus { outline: none; }
+.app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; background: #f2f2f7; }
+.content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 100px; }
+.content::-webkit-scrollbar { display: none; }
+.tabbar { position: fixed; bottom: 0; left: 0; right: 0; height: calc(84px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: rgba(248,248,250,0.92); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-top: 0.33px solid rgba(60,60,67,0.18); display: flex; align-items: flex-start; padding-top: 8px; z-index: 100; }
+.tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; transition: transform 0.1s; }
+.tab svg { width: 26px; height: 26px; color: #8e8e93; transition: color 0.15s; }
+.tab span { font-size: 10px; color: #8e8e93; font-weight: 500; transition: color 0.15s; letter-spacing: 0.1px; }
+.tab.active svg, .tab.active span { color: #FF3B30; }
+.tab:active { transform: scale(0.94); }
+.hero { padding: 16px 20px 12px; }
+.hero-sub { font-size: 13px; font-weight: 500; color: #8e8e93; letter-spacing: -0.08px; }
+.hero-title { font-size: 34px; font-weight: 700; letter-spacing: -0.6px; color: #000; margin-top: 2px; line-height: 1.1; }
+.kasse-card { margin: 8px 20px 16px; background: #FF3B30; border-radius: 22px; padding: 22px; color: #fff; position: relative; overflow: hidden; }
+.kasse-label { font-size: 13px; font-weight: 500; opacity: 0.85; letter-spacing: -0.08px; }
+.kasse-amount { font-size: 44px; font-weight: 700; letter-spacing: -1.5px; margin-top: 4px; line-height: 1; font-variant-numeric: tabular-nums; }
+.kasse-sub { font-size: 13px; opacity: 0.85; margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+.kasse-bg { position: absolute; right: -30px; top: -30px; width: 160px; height: 160px; border-radius: 50%; background: rgba(255,255,255,0.08); pointer-events: none; }
+.section-head { padding: 4px 20px 8px; display: flex; justify-content: space-between; align-items: baseline; }
+.section-title { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; color: #000; }
+.section-link { font-size: 15px; color: #FF3B30; font-weight: 400; }
+.list { margin: 0 16px 20px; background: #fff; border-radius: 14px; overflow: hidden; }
+.list-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; transition: background 0.1s; }
+.list-item:active { background: rgba(0,0,0,0.04); }
+.list-item + .list-item { border-top: 0.33px solid rgba(60,60,67,0.18); margin-left: 60px; padding-left: 0; }
+.list-item + .list-item .avatar { margin-left: -46px; }
+.list-item.no-avatar + .list-item.no-avatar { margin-left: 14px; padding-left: 14px; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 600; flex-shrink: 0; letter-spacing: -0.3px; }
+.item-main { flex: 1; min-width: 0; }
+.item-title { font-size: 15px; font-weight: 500; color: #000; letter-spacing: -0.24px; }
+.item-sub { font-size: 13px; color: #8e8e93; margin-top: 1px; letter-spacing: -0.08px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.item-amount { font-size: 17px; font-weight: 600; color: #000; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+.item-amount.danger { color: #FF3B30; }
+.item-amount.strike { text-decoration: line-through; color: #c7c7cc; font-weight: 400; }
+.chevron { color: #c7c7cc; font-size: 17px; }
+.pill { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; letter-spacing: -0.08px; }
+.pill-info { background: rgba(0,122,255,0.12); color: #007AFF; }
+.pill-empty { background: rgba(142,142,147,0.16); color: #8e8e93; }
+.pill-success { background: rgba(52,199,89,0.16); color: #2DA84F; }
+.stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 20px 16px; }
+.stat { background: #fff; border-radius: 14px; padding: 14px; }
+.stat-label { font-size: 12px; color: #8e8e93; font-weight: 500; letter-spacing: -0.08px; display: flex; align-items: center; gap: 4px; }
+.stat-val { font-size: 26px; font-weight: 700; color: #000; letter-spacing: -0.6px; margin-top: 4px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.fab-row { padding: 4px 20px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fab { background: #fff; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; transition: transform 0.1s, background 0.1s; }
+.fab:active { transform: scale(0.97); background: #fafafa; }
+.fab-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; }
+.fab-icon svg { width: 18px; height: 18px; }
+.fab-label { font-size: 14px; font-weight: 600; color: #000; letter-spacing: -0.24px; }
+.fab-sub { font-size: 12px; color: #8e8e93; letter-spacing: -0.08px; }
+.action-card { margin: 4px 20px 20px; background: #fff; border-radius: 14px; padding: 16px; display: flex; align-items: center; gap: 12px; transition: transform 0.1s; }
+.action-card:active { transform: scale(0.99); }
+.action-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.action-icon svg { width: 20px; height: 20px; }
+.action-text { flex: 1; }
+.action-title { font-size: 15px; font-weight: 600; color: #000; letter-spacing: -0.24px; }
+.action-sub { font-size: 13px; color: #8e8e93; margin-top: 1px; letter-spacing: -0.08px; }
+.joker-btn { background: rgba(0,122,255,0.12); color: #007AFF; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: transform 0.1s; }
+.joker-btn:active { transform: scale(0.9); }
+.joker-btn svg { width: 14px; height: 14px; }
+.cat-label { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #8e8e93; }
+.fade-in { animation: fade 0.3s ease-out; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes celebrate { 0% { transform: scale(1); } 50% { transform: scale(1.06); } 100% { transform: scale(1); } }
+.celebrate { animation: celebrate 0.4s ease-out; }
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: flex-end; animation: modalbg 0.25s ease-out; }
+@keyframes modalbg { from { opacity: 0; } to { opacity: 1; } }
+.modal { background: #f2f2f7; border-radius: 22px 22px 0 0; width: 100%; max-height: 85vh; overflow-y: auto; padding: 14px 0 calc(20px + env(safe-area-inset-bottom)); animation: modalup 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+@keyframes modalup { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-handle { width: 36px; height: 5px; background: rgba(60,60,67,0.3); border-radius: 3px; margin: 0 auto 14px; }
+.modal-head { padding: 0 20px 16px; display: flex; justify-content: space-between; align-items: center; }
+.modal-title { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
+.modal-close { color: #8e8e93; font-size: 17px; }
+.field { padding: 0 20px 16px; }
+.field-label { font-size: 13px; color: #8e8e93; margin-bottom: 6px; padding-left: 14px; letter-spacing: -0.08px; }
+.field-input { width: 100%; background: #fff; border-radius: 12px; padding: 14px 16px; font-size: 17px; border: none; }
+.field-select { width: 100%; background: #fff; border-radius: 12px; padding: 14px 16px; font-size: 17px; -webkit-appearance: none; appearance: none; border: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%238e8e93' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 36px; }
+.modal-btn-row { padding: 8px 20px 0; display: flex; gap: 10px; }
+.btn-primary { background: #FF3B30; color: #fff; padding: 14px; border-radius: 12px; font-size: 17px; font-weight: 600; flex: 1; transition: transform 0.1s; letter-spacing: -0.24px; }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { background: #c7c7cc; color: #fff; }
+.btn-secondary { background: rgba(120,120,128,0.16); color: #FF3B30; padding: 14px 18px; border-radius: 12px; font-size: 17px; font-weight: 500; transition: transform 0.1s; }
+.btn-secondary:active { transform: scale(0.98); }
+.pay-row { background: #fff; padding: 14px; display: flex; align-items: center; gap: 12px; }
+.pay-row + .pay-row { border-top: 0.33px solid rgba(60,60,67,0.18); }
+.pay-list { background: #fff; border-radius: 14px; margin: 0 20px 16px; overflow: hidden; }
+.toggle { width: 51px; height: 31px; background: #e9e9eb; border-radius: 16px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+.toggle.on { background: #34C759; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+.toggle.on::after { transform: translateX(20px); }
+.checkbox-disabled { opacity: 0.4; pointer-events: none; }
+.info-banner { margin: 0 20px 16px; background: rgba(0,122,255,0.1); color: #007AFF; padding: 12px 14px; border-radius: 12px; font-size: 13px; display: flex; gap: 8px; align-items: flex-start; letter-spacing: -0.08px; }
+.info-banner svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+.total-row { margin: 0 20px 16px; padding: 14px 16px; background: #fff; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
+.total-label { font-size: 15px; font-weight: 500; }
+.total-amount { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+.empty { padding: 40px 20px; text-align: center; color: #8e8e93; font-size: 15px; }
+.archive-summary { background: #fff; border-radius: 14px; margin: 0 16px 12px; padding: 14px; }
+.archive-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.archive-month { font-size: 17px; font-weight: 600; letter-spacing: -0.24px; }
+.archive-kasse { font-size: 17px; font-weight: 700; letter-spacing: -0.24px; font-variant-numeric: tabular-nums; }
+.archive-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.archive-row + .archive-row { border-top: 0.33px solid rgba(60,60,67,0.18); }
+.toast { position: fixed; top: calc(20px + env(safe-area-inset-top)); left: 20px; right: 20px; background: rgba(28,28,30,0.92); color: #fff; padding: 14px 18px; border-radius: 14px; font-size: 15px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 300; display: flex; align-items: center; gap: 10px; animation: toastin 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+.toast.success { background: rgba(52,199,89,0.95); }
+@keyframes toastin { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.toast svg { width: 18px; height: 18px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="content" id="content"></div>
+  <div class="tabbar">
+    <button class="tab active" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12L12 3l9 9"/><path d="M5 10v10h14V10"/></svg><span>Hjem</span></button>
+    <button class="tab" data-tab="rules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg><span>Regler</span></button>
+    <button class="tab" data-tab="members"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.5 0 4 1.5 4 4"/></svg><span>Beboere</span></button>
+    <button class="tab" data-tab="archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M10 12h4"/></svg><span>Arkiv</span></button>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script>
+const monthNames = ['Januar','Februar','Mars','April','Mai','Juni','Juli','August','September','Oktober','November','Desember'];
+const memberColors = ['#5856D6','#34C759','#FF9500','#FF2D55','#007AFF','#AF52DE','#FF3B30','#5AC8FA'];
+const STORAGE_KEY = 'botkassa-v1';
+const now = new Date();
+
+const defaultState = {
+  currentMonth: { year: now.getFullYear(), month: now.getMonth() },
+  members: [],
+  rules: [
+    { id: 1, category: 'Kjøkken', desc: 'Skitten oppvask over natten', amount: 75 },
+    { id: 2, category: 'Kjøkken', desc: 'Mat på benk/komfyr', amount: 50 },
+    { id: 3, category: 'Kjøkken', desc: 'Fett i vasken', amount: 100 },
+    { id: 4, category: 'Bad', desc: 'Skjegg/tannkrem i vask', amount: 75 },
+    { id: 5, category: 'Bad', desc: 'Snus i vask eller på speil', amount: 75 },
+    { id: 6, category: 'Bad', desc: 'Våte håndklær på gulvet', amount: 75 },
+    { id: 7, category: 'Klesvask', desc: 'Glemt vaskemaskin (12t+)', amount: 100 },
+    { id: 8, category: 'Klesvask', desc: 'Tøy på tørkestativ > 48t', amount: 75 },
+  ],
+  fines: [],
+  jokers: {},
+  jokerLog: [],
+  archive: [],
+};
+
+let state = loadState();
+let view = 'home';
+
+function loadState() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return { ...defaultState, ...JSON.parse(stored) };
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(defaultState));
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+
+function fmt(d) {
+  const date = new Date(d);
+  const diff = Math.floor((Date.now() - date.getTime()) / 3600000);
+  if (diff < 1) return 'For ' + Math.max(1, Math.floor((Date.now() - date.getTime()) / 60000)) + ' min siden';
+  if (diff < 24) return 'For ' + diff + 't siden';
+  if (diff < 48) return 'I går';
+  return date.toLocaleDateString('nb-NO', { day:'numeric', month:'short' });
+}
+
+function getMemberTotals() {
+  return state.members.map(m => {
+    const mFines = state.fines.filter(f => f.memberId === m.id && !f.usedJoker);
+    const mUsedJoker = state.fines.filter(f => f.memberId === m.id && f.usedJoker);
+    const j = state.jokers[m.id] || { available: 1, earned: 0 };
+    return {
+      ...m,
+      activeFines: mFines.length,
+      jokerUsedCount: mUsedJoker.length,
+      total: mFines.reduce((s, f) => s + f.amount, 0),
+      jokers: j.available + j.earned,
+      jokersAvail: j.available, jokersEarned: j.earned,
+    };
+  });
+}
+
+const totalKasse = () => state.fines.filter(f => !f.usedJoker).reduce((s, f) => s + f.amount, 0);
+
+function toast(message, type) {
+  const root = document.getElementById('toast-root');
+  const icon = type === 'success' ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16v.5"/></svg>';
+  root.innerHTML = '<div class="toast ' + (type || '') + '">' + icon + '<span>' + message + '</span></div>';
+  setTimeout(() => { root.innerHTML = ''; }, 2500);
+}
+
+function haptic() {
+  if (navigator.vibrate) navigator.vibrate(10);
+}
+
+function renderHome() {
+  const total = totalKasse();
+  const totals = getMemberTotals();
+  const recent = [...state.fines].sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+  const activeCount = state.fines.filter(f => !f.usedJoker).length;
+  const jokersLeft = totals.reduce((s, m) => s + m.jokers, 0);
+
+  if (state.members.length === 0) {
+    return '<div class="hero fade-in"><div class="hero-sub">' + monthNames[state.currentMonth.month] + ' ' + state.currentMonth.year + '</div><div class="hero-title">Velkommen</div></div>' +
+      '<div class="empty" style="padding: 20px 20px 40px"><div style="font-size: 50px; margin-bottom: 16px">👋</div><div style="font-size: 17px; color: #000; font-weight: 600; margin-bottom: 6px">Legg til beboere først</div><div style="margin-bottom: 24px; color: #8e8e93">Du må legge til hvem som bor i kollektivet før du kan registrere bøter.</div><button class="btn-primary" style="display:inline-block" onclick="view=\'members\';render()">Gå til Beboere</button></div>';
+  }
+
+  return '<div class="hero fade-in"><div class="hero-sub">' + monthNames[state.currentMonth.month] + ' ' + state.currentMonth.year + '</div><div class="hero-title">Oversikt</div></div>' +
+    '<div class="kasse-card fade-in"><div class="kasse-bg"></div><div class="kasse-label">Felleskasse</div><div class="kasse-amount" id="kasse-amount">' + total.toLocaleString('nb-NO') + ' kr</div><div class="kasse-sub"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>' + activeCount + ' aktive bøter denne måneden</div></div>' +
+    '<div class="stat-row fade-in"><div class="stat"><div class="stat-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>Aktive bøter</div><div class="stat-val">' + activeCount + '</div></div><div class="stat"><div class="stat-label">♠ Jokere igjen</div><div class="stat-val">' + jokersLeft + '</div></div></div>' +
+    '<div class="fab-row fade-in"><button class="fab" onclick="openModal(\'addFine\')"><div class="fab-icon" style="background:#FF3B30"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><div class="fab-label">Ny bot</div><div class="fab-sub">Registrer brudd</div></button><button class="fab" onclick="openModal(\'earnJoker\')"><div class="fab-icon" style="background:#007AFF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="6"/><path d="M9 14l-2 7 5-3 5 3-2-7"/></svg></div><div class="fab-label">Logg husarbeid</div><div class="fab-sub">Tjen joker</div></button></div>' +
+    '<div class="section-head"><div class="section-title">Beboere</div></div><div class="list fade-in">' +
+    totals.map(m => '<div class="list-item"><div class="avatar" style="background:' + m.color + '">' + m.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title">' + m.name + '</div><div class="item-sub">' + m.activeFines + ' aktive <span class="pill ' + (m.jokers === 0 ? 'pill-empty' : 'pill-info') + '">♠ ' + m.jokers + '</span></div></div><div class="item-amount">' + m.total + ' kr</div></div>').join('') +
+    '</div>' +
+    (recent.length > 0 ? '<div class="section-head"><div class="section-title">Siste hendelser</div></div><div class="list fade-in">' +
+    recent.map(f => {
+      const m = state.members.find(x => x.id === f.memberId);
+      const r = state.rules.find(x => x.id === f.ruleId);
+      return '<div class="list-item"><div class="avatar" style="background:' + (m?.color || '#999') + '">' + (m?.name.charAt(0).toUpperCase() || '?') + '</div><div class="item-main"><div class="item-title">' + (r?.desc || 'Ukjent') + '</div><div class="item-sub">' + (m?.name || 'Ukjent') + ' · ' + fmt(f.date) + (f.usedJoker ? ' · joker' : '') + '</div></div>' +
+        (f.usedJoker ? '<div class="item-amount strike">' + f.amount + ' kr</div>' : '<div class="item-amount danger">' + f.amount + ' kr</div><button class="joker-btn" onclick="useJoker(' + f.id + ')" aria-label="Bruk joker"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-1 2-7 6-7 11a5 5 0 005 5c-1 0-2 1-2 2h8c0-1-1-2-2-2a5 5 0 005-5c0-5-6-9-7-11z"/></svg></button>') +
+        '</div>';
+    }).join('') + '</div>' : '') +
+    '<div class="action-card fade-in" onclick="openModal(\'closeMonth\')"><div class="action-icon" style="background:rgba(255,149,0,0.16); color:#FF9500"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 21V5a1 1 0 011-1h12l-3 4 3 4H6"/></svg></div><div class="action-text"><div class="action-title">Avslutt måneden</div><div class="action-sub">Logg innbetalinger og start ny måned</div></div><svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></div>';
+}
+
+function renderRules() {
+  const cats = [...new Set(state.rules.map(r => r.category))];
+  return '<div class="hero fade-in"><div class="hero-sub">' + state.rules.length + ' regler aktive</div><div class="hero-title">Regler</div></div>' +
+    cats.map(cat => '<div class="section-head"><div class="cat-label">' + cat + '</div></div><div class="list fade-in">' +
+      state.rules.filter(r => r.category === cat).map(r => '<div class="list-item no-avatar"><div class="item-main"><div class="item-title">' + r.desc + '</div></div><div class="item-amount danger">' + r.amount + ' kr</div><button class="joker-btn" style="background:rgba(255,59,48,0.12); color:#FF3B30" onclick="deleteRule(' + r.id + ')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button></div>').join('') +
+      '</div>').join('') +
+    '<div style="padding: 4px 20px 16px"><button class="fab" style="width:100%; flex-direction:row; align-items:center; gap:12px" onclick="openModal(\'addRule\')"><div class="fab-icon" style="background:#FF3B30"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><div><div class="fab-label">Legg til ny regel</div><div class="fab-sub">Velg kategori og beløp</div></div></button></div>' +
+    '<div class="section-head"><div class="cat-label">Joker-system</div></div><div class="list fade-in" style="padding: 14px 16px"><div style="font-size:14px; color:#3c3c43; line-height:1.5">Hver beboer starter måneden med <strong>1 joker</strong> som sletter en bot. Tjen 1 ekstra ved å støvsuge hele leiligheten eller vaske dusj og do grundig.</div></div>';
+}
+
+function renderMembers() {
+  const totals = getMemberTotals();
+  return '<div class="hero fade-in"><div class="hero-sub">' + state.members.length + ' i kollektivet</div><div class="hero-title">Beboere</div></div>' +
+    (totals.length === 0 ? '<div class="empty">Ingen beboere lagt til ennå.</div>' :
+      '<div class="list fade-in">' + totals.map(m => '<div class="list-item"><div class="avatar" style="background:' + m.color + '; width:44px; height:44px; font-size:17px">' + m.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title" style="font-size:17px">' + m.name + '</div><div class="item-sub">' + m.jokers + ' jokere · ' + m.activeFines + ' aktive bøter</div></div><button class="joker-btn" style="background:rgba(255,59,48,0.12); color:#FF3B30" onclick="deleteMember(' + m.id + ')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button></div>').join('') + '</div>') +
+    '<div style="padding: 4px 20px"><button class="fab" style="width:100%; flex-direction:row; align-items:center; gap:12px" onclick="openModal(\'addMember\')"><div class="fab-icon" style="background:#FF3B30"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><div><div class="fab-label">Legg til beboer</div><div class="fab-sub">Skriv inn navn</div></div></button></div>';
+}
+
+function renderArchive() {
+  const sorted = [...state.archive].sort((a,b) => (b.year*12+b.month) - (a.year*12+a.month));
+  return '<div class="hero fade-in"><div class="hero-sub">' + state.archive.length + ' avsluttet' + (state.archive.length === 1 ? '' : 'e') + ' måned' + (state.archive.length === 1 ? '' : 'er') + '</div><div class="hero-title">Arkiv</div></div>' +
+    (sorted.length === 0 ? '<div class="empty">Ingen avsluttede måneder ennå. Avslutt en måned fra Hjem for å arkivere den.</div>' :
+      sorted.map(a => '<div class="archive-summary fade-in"><div class="archive-head"><div class="archive-month">' + monthNames[a.month] + ' ' + a.year + '</div><div class="archive-kasse">' + a.kasse + ' kr</div></div>' +
+        a.summary.map(s => { const m = a.members.find(x => x.id === s.memberId); return '<div class="archive-row"><div class="avatar" style="background:' + (m?.color || '#999') + '; width:32px; height:32px; font-size:13px">' + s.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title" style="font-size:14px">' + s.name + '</div><div class="item-sub">' + s.fines + ' bøter · ' + s.jokerUsed + ' joker brukt</div></div><span class="pill pill-success">' + s.total + ' kr · Betalt</span></div>'; }).join('') +
+        '</div>').join(''));
+}
+
+function render() {
+  const el = document.getElementById('content');
+  el.scrollTop = 0;
+  if (view === 'home') el.innerHTML = renderHome();
+  else if (view === 'rules') el.innerHTML = renderRules();
+  else if (view === 'members') el.innerHTML = renderMembers();
+  else if (view === 'archive') el.innerHTML = renderArchive();
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === view));
+  saveState();
+}
+
+function useJoker(fineId) {
+  const fine = state.fines.find(f => f.id === fineId);
+  if (!fine) return;
+  const j = state.jokers[fine.memberId] || { available: 0, earned: 0 };
+  if (j.available + j.earned === 0) { toast('Ingen jokere igjen'); return; }
+  haptic();
+  if (j.earned > 0) j.earned -= 1; else j.available -= 1;
+  state.jokers[fine.memberId] = j;
+  fine.usedJoker = true;
+  render();
+  toast('Joker brukt — bot slettet', 'success');
+}
+
+function deleteRule(id) {
+  if (!confirm('Slette denne regelen?')) return;
+  state.rules = state.rules.filter(r => r.id !== id);
+  render();
+}
+
+function deleteMember(id) {
+  if (!confirm('Slette beboer? Bøtene deres blir også fjernet.')) return;
+  state.members = state.members.filter(m => m.id !== id);
+  state.fines = state.fines.filter(f => f.memberId !== id);
+  delete state.jokers[id];
+  render();
+}
+
+function closeModal() {
+  const root = document.getElementById('modal-root');
+  const modal = root.querySelector('.modal');
+  if (modal) {
+    modal.style.animation = 'modalup 0.25s cubic-bezier(0.32, 0.72, 0, 1) reverse';
+    setTimeout(() => { root.innerHTML = ''; }, 240);
+  } else {
+    root.innerHTML = '';
+  }
+}
+
+function openModal(type) {
+  haptic();
+  const root = document.getElementById('modal-root');
+  if (type === 'addFine') {
+    if (state.members.length === 0) { toast('Legg til beboere først'); return; }
+    if (state.rules.length === 0) { toast('Legg til regler først'); return; }
+    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Registrer bot</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
+      '<div class="field"><div class="field-label">HVEM?</div><select class="field-select" id="m-member"><option value="">Velg beboer...</option>' + state.members.map(m => '<option value="' + m.id + '">' + m.name + '</option>').join('') + '</select></div>' +
+      '<div class="field"><div class="field-label">HVA?</div><select class="field-select" id="m-rule"><option value="">Velg regel...</option>' + state.rules.map(r => '<option value="' + r.id + '">' + r.category + ' — ' + r.desc + ' (' + r.amount + ' kr)</option>').join('') + '</select></div>' +
+      '<div class="modal-btn-row"><button class="btn-primary" onclick="saveFine()">Lagre bot</button></div></div></div>';
+  } else if (type === 'earnJoker') {
+    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Logg husarbeid</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
+      '<div class="info-banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>Tjen 1 ekstra joker (maks 1 per måned). De andre bør bekrefte at jobben er gjort.</span></div>' +
+      '<div class="field"><div class="field-label">HVEM?</div><select class="field-select" id="m-member">' + state.members.map(m => { const j = state.jokers[m.id] || { earned: 0 }; return '<option value="' + m.id + '"' + (j.earned >= 1 ? ' disabled' : '') + '>' + m.name + (j.earned >= 1 ? ' (har allerede tjent)' : '') + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><div class="field-label">HVA BLE GJORT?</div><select class="field-select" id="m-task"><option>Støvsugd og tørket støv i hele leiligheten</option><option>Vasket dusj og do grundig</option></select></div>' +
+      '<div class="modal-btn-row"><button class="btn-primary" onclick="saveJoker()">Registrer</button></div></div></div>';
+  } else if (type === 'addMember') {
+    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Ny beboer</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
+      '<div class="field"><div class="field-label">NAVN</div><input class="field-input" id="m-name" placeholder="F.eks. Marius" autofocus></div>' +
+      '<div class="modal-btn-row"><button class="btn-primary" onclick="saveMember()">Legg til</button></div></div></div>';
+    setTimeout(() => { const i = document.getElementById('m-name'); if (i) i.focus(); }, 100);
+  } else if (type === 'addRule') {
+    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Ny regel</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
+      '<div class="field"><div class="field-label">KATEGORI</div><input class="field-input" id="m-cat" placeholder="F.eks. Kjøkken"></div>' +
+      '<div class="field"><div class="field-label">BESKRIVELSE</div><input class="field-input" id="m-desc" placeholder="Hva er bruddet?"></div>' +
+      '<div class="field"><div class="field-label">BELØP (KR)</div><input class="field-input" id="m-amt" type="number" inputmode="numeric" placeholder="75"></div>' +
+      '<div class="modal-btn-row"><button class="btn-primary" onclick="saveRule()">Lagre regel</button></div></div></div>';
+  } else if (type === 'closeMonth') {
+    const totals = getMemberTotals();
+    const total = totalKasse();
+    if (total === 0 && totals.every(m => m.total === 0)) {
+      closeModal();
+      if (confirm('Ingen bøter denne måneden. Vil du fortsatt gå til neste måned?')) doCloseMonth([]);
+      return;
+    }
+    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Avslutt ' + monthNames[state.currentMonth.month] + '</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
+      '<div class="info-banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>Marker hvem som har betalt. Når alle er betalt, kan du arkivere måneden. Alle får 1 ny joker.</span></div>' +
+      '<div class="pay-list">' + totals.map(m => '<div class="pay-row"><div class="avatar" style="background:' + m.color + '">' + m.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title">' + m.name + '</div><div class="item-sub">' + m.activeFines + ' bøter</div></div><div class="item-amount" style="margin-right:10px">' + m.total + ' kr</div><div class="toggle ' + (m.total === 0 ? 'on checkbox-disabled' : '') + '" data-pay="' + m.id + '" onclick="togglePay(' + m.id + ')"></div></div>').join('') + '</div>' +
+      '<div class="total-row"><div class="total-label">Totalt i kassa</div><div class="total-amount">' + total + ' kr</div></div>' +
+      '<div class="modal-btn-row"><button class="btn-primary" id="confirm-close" onclick="confirmClose()">Godkjenn og arkiver</button></div></div></div>';
+    setTimeout(() => updateCloseBtn(), 50);
+  }
+}
+
+let paidIds = new Set();
+function togglePay(id) {
+  haptic();
+  const tg = document.querySelector('[data-pay="' + id + '"]');
+  if (paidIds.has(id)) { paidIds.delete(id); tg.classList.remove('on'); }
+  else { paidIds.add(id); tg.classList.add('on'); }
+  updateCloseBtn();
+}
+function updateCloseBtn() {
+  const totals = getMemberTotals();
+  const allPaid = totals.every(m => m.total === 0 || paidIds.has(m.id));
+  const btn = document.getElementById('confirm-close');
+  if (btn) btn.disabled = !allPaid;
+}
+function confirmClose() {
+  const totals = getMemberTotals();
+  if (!totals.every(m => m.total === 0 || paidIds.has(m.id))) return;
+  doCloseMonth([...paidIds]);
+  paidIds = new Set();
+}
+function doCloseMonth(paidArr) {
+  const totals = getMemberTotals();
+  state.archive.push({
+    id: 'arch-' + Date.now(),
+    year: state.currentMonth.year, month: state.currentMonth.month,
+    closedDate: new Date().toISOString(),
+    members: JSON.parse(JSON.stringify(state.members)),
+    summary: totals.map(m => ({ memberId: m.id, name: m.name, fines: m.activeFines, jokerUsed: m.jokerUsedCount, total: m.total, paid: m.total === 0 || paidArr.includes(m.id) })),
+    kasse: totalKasse(),
+  });
+  state.fines = [];
+  state.jokerLog = [];
+  const newJokers = {};
+  state.members.forEach(m => { newJokers[m.id] = { available: 1, earned: 0 }; });
+  state.jokers = newJokers;
+  let nm = state.currentMonth.month + 1, ny = state.currentMonth.year;
+  if (nm > 11) { nm = 0; ny += 1; }
+  state.currentMonth = { year: ny, month: nm };
+  closeModal();
+  render();
+  toast('Måneden er arkivert', 'success');
+}
+
+function saveFine() {
+  const memberId = parseInt(document.getElementById('m-member').value);
+  const ruleId = parseInt(document.getElementById('m-rule').value);
+  if (!memberId || !ruleId) { toast('Velg beboer og regel'); return; }
+  const rule = state.rules.find(r => r.id === ruleId);
+  state.fines.push({ id: Date.now(), memberId, ruleId, amount: rule.amount, date: new Date().toISOString(), usedJoker: false });
+  closeModal(); render(); toast('Bot registrert', 'success');
+}
+function saveJoker() {
+  const memberId = parseInt(document.getElementById('m-member').value);
+  const task = document.getElementById('m-task').value;
+  if (!memberId) { toast('Velg beboer'); return; }
+  const j = state.jokers[memberId] || { available: 1, earned: 0 };
+  if (j.earned >= 1) { toast('Allerede tjent denne måneden'); return; }
+  state.jokers[memberId] = { ...j, earned: j.earned + 1 };
+  state.jokerLog.push({ id: Date.now(), memberId, task, date: new Date().toISOString() });
+  closeModal(); render(); toast('Joker tjent', 'success');
+}
+function saveMember() {
+  const name = document.getElementById('m-name').value.trim();
+  if (!name) { toast('Skriv inn navn'); return; }
+  const id = Date.now();
+  state.members.push({ id, name, color: memberColors[state.members.length % memberColors.length] });
+  state.jokers[id] = { available: 1, earned: 0 };
+  closeModal(); render(); toast('Beboer lagt til', 'success');
+}
+function saveRule() {
+  const cat = document.getElementById('m-cat').value.trim();
+  const desc = document.getElementById('m-desc').value.trim();
+  const amt = parseInt(document.getElementById('m-amt').value);
+  if (!cat || !desc || !amt) { toast('Fyll ut alle felt'); return; }
+  state.rules.push({ id: Date.now(), category: cat, desc, amount: amt });
+  closeModal(); render(); toast('Regel lagt til', 'success');
+}
+
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => { haptic(); view = t.dataset.tab; render(); }));
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+
+render();
+</script>
+</body>
+</html>
