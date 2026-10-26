@@ -2,7 +2,7 @@
   "name": "Botkassa",
   "short_name": "Botkassa",
   "description": "Botsystem for studenthusholdninger",
-  "start_url": "./index.html",
+  "id": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
