@@ -55,20 +55,28 @@ Du har nå en app på telefonen!
 Når du vil endre noe:
 - Last opp den oppdaterte fila i repoet (klikk fila → blyant-ikon → endre → Commit)
 - GitHub Pages oppdaterer seg automatisk på ~1 minutt
-- På telefonen: lukk appen helt og åpne på nytt — service workeren henter ny versjon
+- Appen henter alltid nyeste versjon når telefonen er på nett, så alle får oppdateringen samtidig
 
 ## Hva som er inkludert
 
+- Felles data for hele kollektivet via Supabase (prosjektet «botkassa»), synket mellom alle telefonene
+- Felles kollektiv-kode, og «Hvem er du?» på hver telefon
+- Del-lenke (Beboere → «Del appen med kollektivet») som logger rett inn uten å skrive kode
 - Felleskasse med bøteregistrering
-- Joker-system (1 per måned, kan tjene 1 ekstra)
+- Joker-system: 1 fast joker per måned, pluss jokere fra to husarbeid-oppgaver
+  (støvsuge/tørke støv og vaske dusj/do). Hver oppgave kan gjøres én gang per kalenderuke, uansett hvem.
+- Slette feilregistrerte bøter. Slettingen logges i Arkiv med hvem som slettet.
 - Månedsavslutning med innbetalingslogg
 - Arkiv over avsluttede måneder
-- Lokal lagring (data forsvinner ikke når du lukker appen)
-- Offline-bruk (service worker cacher hele appen)
+- Offline: viser siste lagrede data uten nett (endringer krever nett)
+
+## Database
+
+Supabase-prosjekt `botkassa` (eu-north-1). Tabellene er stengt for direkte tilgang. Appen bruker bare
+`bk_`-funksjonene, som sjekker kollektiv-koden. Gratisprosjekter settes på pause etter 7 dager uten bruk.
+Da viser appen en melding, og du må trykke «Restore project» på supabase.com.
 
 ## Hva som mangler (kan bygges senere)
 
-- Synkronisering mellom flere telefoner (krever backend)
 - Push-varsler
-- Innlogging og brukerkontoer
 - Eksport av arkivert måned som PDF

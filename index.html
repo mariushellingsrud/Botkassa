@@ -127,6 +127,18 @@ input:focus, select:focus { outline: none; }
 .toast.success { background: rgba(52,199,89,0.95); }
 @keyframes toastin { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .toast svg { width: 18px; height: 18px; flex-shrink: 0; }
+.archive-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #8e8e93; margin: 12px 0 2px; }
+.log-icon { width: 32px; height: 32px; border-radius: 50%; background: rgba(142,142,147,0.16); color: #8e8e93; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.log-icon svg { width: 15px; height: 15px; }
+.setup-text { padding: 0 20px 16px; font-size: 15px; color: #3c3c43; line-height: 1.45; letter-spacing: -0.24px; }
+.banner { margin: 8px 16px 4px; padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.4; background: rgba(255,149,0,0.14); color: #a05a00; }
+.sheet-meta { padding: 0 20px 16px; font-size: 14px; color: #8e8e93; line-height: 1.5; }
+.sheet-actions { padding: 0 20px; display: flex; flex-direction: column; gap: 10px; }
+.sheet-note { padding: 12px 20px 0; font-size: 13px; color: #8e8e93; text-align: center; }
+.btn-blue { background: #007AFF; color: #fff; padding: 14px; border-radius: 12px; font-size: 17px; font-weight: 600; letter-spacing: -0.24px; transition: transform 0.1s; }
+.btn-blue:disabled { background: #c7c7cc; }
+.btn-danger { background: rgba(255,59,48,0.12); color: #FF3B30; padding: 14px; border-radius: 12px; font-size: 17px; font-weight: 600; letter-spacing: -0.24px; transition: transform 0.1s; }
+.btn-blue:active, .btn-danger:active { transform: scale(0.98); }
 </style>
 </head>
 <body>
@@ -143,44 +155,194 @@ input:focus, select:focus { outline: none; }
 <div id="toast-root"></div>
 
 <script>
+const SUPABASE_URL = 'https://zekqkxenfojvturunsge.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Deyp9MuenrsUOl7bSUEJDg_aaWdEuYv';
+const KODE_KEY = 'botkassa-kode';
+const ME_KEY = 'botkassa-meg';
+const CACHE_KEY = 'botkassa-cache';
+const LEGACY_KEY = 'botkassa-v1';
+const IMPORT_DONE_KEY = 'botkassa-importert';
+const JOKER_TASKS = ['Støvsugd og tørket støv i hele leiligheten', 'Vasket dusj og do grundig'];
 const monthNames = ['Januar','Februar','Mars','April','Mai','Juni','Juli','August','September','Oktober','November','Desember'];
-const memberColors = ['#5856D6','#34C759','#FF9500','#FF2D55','#007AFF','#AF52DE','#FF3B30','#5AC8FA'];
-const STORAGE_KEY = 'botkassa-v1';
-const now = new Date();
+const plusIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+const trashIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>';
+const infoIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>';
+const jokerIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-1 2-7 6-7 11a5 5 0 005 5c-1 0-2 1-2 2h8c0-1-1-2-2-2a5 5 0 005-5c0-5-6-9-7-11z"/></svg>';
+const chevron = '<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>';
 
-const defaultState = {
-  currentMonth: { year: now.getFullYear(), month: now.getMonth() },
-  members: [],
-  rules: [
-    { id: 1, category: 'Kjøkken', desc: 'Skitten oppvask over natten', amount: 75 },
-    { id: 2, category: 'Kjøkken', desc: 'Mat på benk/komfyr', amount: 50 },
-    { id: 3, category: 'Kjøkken', desc: 'Fett i vasken', amount: 100 },
-    { id: 4, category: 'Bad', desc: 'Skjegg/tannkrem i vask', amount: 75 },
-    { id: 5, category: 'Bad', desc: 'Snus i vask eller på speil', amount: 75 },
-    { id: 6, category: 'Bad', desc: 'Våte håndklær på gulvet', amount: 75 },
-    { id: 7, category: 'Klesvask', desc: 'Glemt vaskemaskin (12t+)', amount: 100 },
-    { id: 8, category: 'Klesvask', desc: 'Tøy på tørkestativ > 48t', amount: 75 },
-  ],
-  fines: [],
-  jokers: {},
-  jokerLog: [],
-  archive: [],
-};
-
-let state = loadState();
+let state = null;   // siste data fra databasen (bk_state)
+let lastJson = '';
 let view = 'home';
+let setup = null;   // null | 'kode' | 'import' | 'meg'
+let problem = null; // null | 'offline' | 'down'
+let busy = false;
 
-function loadState() {
+function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
+function lsDel(k) { try { localStorage.removeItem(k); } catch(e) {} }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+
+// ---------- Database ----------
+
+async function rpc(fn, args) {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kode: lsGet(KODE_KEY), ...args }),
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch(e) {}
+  if (!res.ok) {
+    const err = new Error((data && data.message) || 'Noe gikk galt (' + res.status + ')');
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function toState(s) {
+  const [y, m] = s.period.split('-').map(Number);
+  return { ...s, currentMonth: { year: y, month: m - 1 } };
+}
+
+// Henter alt fra databasen. Returnerer true hvis noe på skjermen bør tegnes på nytt.
+async function refresh() {
+  if (!lsGet(KODE_KEY)) return false;
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return { ...defaultState, ...JSON.parse(stored) };
-  } catch(e) {}
-  return JSON.parse(JSON.stringify(defaultState));
+    const s = await rpc('bk_state');
+    const json = JSON.stringify(s);
+    const hadProblem = problem !== null;
+    problem = null;
+    if (json === lastJson) return hadProblem;
+    lastJson = json;
+    state = toState(s);
+    lsSet(CACHE_KEY, json);
+    return true;
+  } catch (e) {
+    const before = problem;
+    handleError(e, true);
+    return problem !== before;
+  }
 }
 
-function saveState() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+function handleError(e, silent) {
+  if (e.message === 'Feil kode') {
+    lsDel(KODE_KEY); lsDel(CACHE_KEY);
+    state = null; lastJson = ''; setup = 'kode';
+    closeModal(); render();
+    toast('Koden er feil eller har blitt endret');
+    return;
+  }
+  if (e instanceof TypeError) problem = 'offline';
+  else if (!e.status || e.status >= 500) problem = 'down';
+  if (!silent) toast(e instanceof TypeError ? 'Ingen nettforbindelse, prøv igjen' : e.message);
 }
+
+// Kjører en endring i databasen, henter ny data og tegner på nytt
+async function act(fn, args, okMsg) {
+  if (busy) return false;
+  busy = true;
+  try {
+    await rpc(fn, args);
+    await refresh();
+    decideSetup();
+    closeModal();
+    render(true);
+    if (okMsg) toast(okMsg, 'success');
+    return true;
+  } catch (e) {
+    handleError(e);
+    if (setup !== 'kode') render(true);
+    return false;
+  } finally {
+    busy = false;
+  }
+}
+
+let pollTimer = null;
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => { if (document.visibilityState === 'visible') poll(); }, 5000);
+}
+async function poll() {
+  if (busy || !lsGet(KODE_KEY)) return;
+  const changed = await refresh();
+  if (!changed) return;
+  const a = document.activeElement;
+  if (a && a.tagName === 'INPUT' && document.getElementById('content').contains(a)) { lastJson = ''; return; }
+  decideSetup();
+  render(true);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') poll(); });
+window.addEventListener('online', poll);
+
+// ---------- Oppstart: kode, gamle data, hvem er du ----------
+
+function currentMe() {
+  const id = Number(lsGet(ME_KEY));
+  return (state && state.members.find(m => m.id === id)) || null;
+}
+
+function legacyData() {
+  try {
+    const d = JSON.parse(lsGet(LEGACY_KEY));
+    if (!d || !Array.isArray(d.members) || d.members.length === 0) return null;
+    // Engangs-halvering av reglene, rundet opp til nærmeste 5 kr (75 → 40)
+    if (!d.pricesHalved && Array.isArray(d.rules)) d.rules = d.rules.map(r => ({ ...r, amount: Math.ceil(r.amount / 10) * 5 }));
+    return d;
+  } catch(e) { return null; }
+}
+
+function decideSetup() {
+  if (!lsGet(KODE_KEY)) { setup = 'kode'; return; }
+  if (!state) { setup = null; return; }
+  if (state.members.length === 0 && legacyData() && !lsGet(IMPORT_DONE_KEY)) { setup = 'import'; return; }
+  setup = currentMe() ? null : 'meg';
+}
+
+async function submitKode() {
+  const k = (document.getElementById('s-kode')?.value || '').trim().toLowerCase();
+  if (!k) { toast('Skriv inn koden'); return; }
+  try {
+    if (!(await rpc('bk_check', { kode: k }))) { toast('Feil kode'); return; }
+    lsSet(KODE_KEY, k);
+    await refresh();
+    decideSetup(); render(); startPolling();
+  } catch (e) { handleError(e); render(); }
+}
+
+async function doImport() {
+  const d = legacyData();
+  if (!d) return;
+  if (await act('bk_import', { p_data: d }, 'Dataene er lastet opp')) lsSet(IMPORT_DONE_KEY, '1');
+}
+function skipImport() { lsSet(IMPORT_DONE_KEY, '1'); decideSetup(); render(); }
+
+function chooseMe(id) { haptic(); lsSet(ME_KEY, String(id)); decideSetup(); render(); }
+async function addMe() {
+  const name = (document.getElementById('s-name')?.value || '').trim();
+  if (!name) { toast('Skriv inn navnet ditt'); return; }
+  if (busy) return;
+  busy = true;
+  try {
+    const id = await rpc('bk_add_member', { p_name: name });
+    lsSet(ME_KEY, String(id));
+    await refresh();
+    decideSetup(); render();
+    toast('Velkommen, ' + name, 'success');
+  } catch (e) { handleError(e); } finally { busy = false; }
+}
+function switchMe() { haptic(); lsDel(ME_KEY); setup = 'meg'; render(); }
+
+function shareLink() {
+  const url = location.origin + location.pathname + '#kode=' + encodeURIComponent(lsGet(KODE_KEY) || '');
+  if (navigator.share) navigator.share({ title: 'Botkassa', text: 'Bli med i Botkassa for kollektivet:', url }).catch(() => {});
+  else if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => toast('Lenke kopiert', 'success'), () => prompt('Kopier lenken:', url));
+  else prompt('Kopier lenken:', url);
+}
+
+// ---------- Hjelpere ----------
 
 function fmt(d) {
   const date = new Date(d);
@@ -190,129 +352,217 @@ function fmt(d) {
   if (diff < 48) return 'I går';
   return date.toLocaleDateString('nb-NO', { day:'numeric', month:'short' });
 }
+function fmtDate(d) { return new Date(d).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' }); }
 
+const activeFines = () => state.fines.filter(f => !f.deletedAt);
+const totalKasse = () => activeFines().filter(f => !f.usedJoker).reduce((s, f) => s + f.amount, 0);
+
+// Jokere: 1 fast per måned + de som er tjent denne måneden − de som er brukt
 function getMemberTotals() {
+  const fines = activeFines();
   return state.members.map(m => {
-    const mFines = state.fines.filter(f => f.memberId === m.id && !f.usedJoker);
-    const mUsedJoker = state.fines.filter(f => f.memberId === m.id && f.usedJoker);
-    const j = state.jokers[m.id] || { available: 1, earned: 0 };
+    const mFines = fines.filter(f => f.memberId === m.id && !f.usedJoker);
+    const used = fines.filter(f => f.memberId === m.id && f.usedJoker).length;
+    const earned = state.earnings.filter(e => e.memberId === m.id).length;
     return {
       ...m,
       activeFines: mFines.length,
-      jokerUsedCount: mUsedJoker.length,
+      jokerUsedCount: used,
       total: mFines.reduce((s, f) => s + f.amount, 0),
-      jokers: j.available + j.earned,
-      jokersAvail: j.available, jokersEarned: j.earned,
+      jokers: Math.max(0, 1 + earned - used),
     };
   });
 }
 
-const totalKasse = () => state.fines.filter(f => !f.usedJoker).reduce((s, f) => s + f.amount, 0);
-
 function toast(message, type) {
   const root = document.getElementById('toast-root');
   const icon = type === 'success' ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16v.5"/></svg>';
-  root.innerHTML = '<div class="toast ' + (type || '') + '">' + icon + '<span>' + message + '</span></div>';
-  setTimeout(() => { root.innerHTML = ''; }, 2500);
+  root.innerHTML = '<div class="toast ' + (type || '') + '">' + icon + '<span>' + esc(message) + '</span></div>';
+  if (type === 'success') haptic();
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => { root.innerHTML = ''; }, 2500);
 }
 
 function haptic() {
   if (navigator.vibrate) navigator.vibrate(10);
 }
 
+function hero(sub, title) {
+  return '<div class="hero fade-in"><div class="hero-sub">' + sub + '</div><div class="hero-title">' + title + '</div></div>';
+}
+function avatar(m, size) {
+  const s = size ? ' width:' + size + 'px; height:' + size + 'px; font-size:' + Math.round(size * 0.4) + 'px' : '';
+  return '<div class="avatar" style="background:' + esc(m?.color || '#8e8e93') + ';' + s + '">' + esc((m?.name || '?').charAt(0).toUpperCase()) + '</div>';
+}
+
+// ---------- Skjermer ----------
+
+function problemBanner() {
+  if (problem === 'offline') return '<div class="banner">Ingen nett. Du ser siste lagrede versjon, og ingenting kan lagres før du er på nett igjen.</div>';
+  if (problem === 'down') return '<div class="banner">Får ikke kontakt med databasen. Har den sovnet? Logg inn på supabase.com, åpne prosjektet «botkassa» og trykk «Restore project».</div>';
+  return '';
+}
+
+function renderKode() {
+  return hero('Velkommen', 'Botkassa') +
+    '<div class="setup-text">Skriv inn koden til kollektivet. Du får koden, eller en lenke, av den som satte opp appen.</div>' +
+    '<div class="field"><input class="field-input" id="s-kode" placeholder="Kode" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')submitKode()"></div>' +
+    '<div class="modal-btn-row"><button class="btn-primary" onclick="submitKode()">Fortsett</button></div>';
+}
+
+function renderImport() {
+  const d = legacyData();
+  const nFines = (d.fines || []).length, nArch = (d.archive || []).length;
+  return hero('Første oppstart', 'Dine data') +
+    '<div class="setup-text">Denne telefonen har data fra den gamle versjonen av appen: <strong>' + d.members.length + (d.members.length === 1 ? ' beboer' : ' beboere') + '</strong>, <strong>' + nFines + (nFines === 1 ? ' bot' : ' bøter') + '</strong> denne måneden og <strong>' + nArch + (nArch === 1 ? ' arkivert måned' : ' arkiverte måneder') + '</strong>. Last dem opp, så ser hele kollektivet det samme.</div>' +
+    '<div class="info-banner">' + infoIcon + '<span>Prisene på reglene halveres samtidig (75 → 40, 50 → 25, 100 → 50). Bøter som allerede er gitt, beholder beløpet.</span></div>' +
+    '<div class="modal-btn-row"><button class="btn-secondary" onclick="skipImport()">Start blankt</button><button class="btn-primary" onclick="doImport()">Last opp</button></div>';
+}
+
+function renderMeg() {
+  return hero('Ett siste steg', 'Hvem er du?') +
+    '<div class="setup-text">Velg navnet ditt. Det står i loggen når du registrerer eller sletter bøter.</div>' +
+    (state.members.length ? '<div class="list fade-in">' + state.members.map(m => '<div class="list-item" onclick="chooseMe(' + m.id + ')">' + avatar(m) + '<div class="item-main"><div class="item-title">' + esc(m.name) + '</div></div>' + chevron + '</div>').join('') + '</div>' : '') +
+    '<div class="section-head"><div class="cat-label">' + (state.members.length ? 'Ikke på lista?' : 'Legg til deg selv') + '</div></div>' +
+    '<div class="field"><input class="field-input" id="s-name" placeholder="Navnet ditt" onkeydown="if(event.key===\'Enter\')addMe()"></div>' +
+    '<div class="modal-btn-row"><button class="btn-primary" onclick="addMe()">Legg til meg</button></div>';
+}
+
+function fineRow(f) {
+  const m = state.members.find(x => x.id === f.memberId) || { name: f.memberName };
+  return '<div class="list-item" onclick="openFine(' + f.id + ')">' + avatar(m) + '<div class="item-main"><div class="item-title">' + esc(f.desc) + '</div><div class="item-sub">' + esc(f.memberName) + ' · ' + fmt(f.date) + (f.usedJoker ? ' · joker' : '') + '</div></div>' +
+    (f.usedJoker ? '<div class="item-amount strike">' + f.amount + ' kr</div>' : '<div class="item-amount danger">' + f.amount + ' kr</div><button class="joker-btn" onclick="event.stopPropagation(); useJoker(' + f.id + ')" aria-label="Bruk joker">' + jokerIcon + '</button>') +
+    '</div>';
+}
+
 function renderHome() {
   const total = totalKasse();
   const totals = getMemberTotals();
-  const recent = [...state.fines].sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
-  const activeCount = state.fines.filter(f => !f.usedJoker).length;
+  const fines = activeFines();
+  const activeCount = fines.filter(f => !f.usedJoker).length;
   const jokersLeft = totals.reduce((s, m) => s + m.jokers, 0);
+  const freeTasks = JOKER_TASKS.filter(t => !state.weekTaken[t]).length;
+  const me = currentMe();
+  const month = monthNames[state.currentMonth.month] + ' ' + state.currentMonth.year;
 
   if (state.members.length === 0) {
-    return '<div class="hero fade-in"><div class="hero-sub">' + monthNames[state.currentMonth.month] + ' ' + state.currentMonth.year + '</div><div class="hero-title">Velkommen</div></div>' +
+    return hero(month, 'Velkommen') +
       '<div class="empty" style="padding: 20px 20px 40px"><div style="font-size: 50px; margin-bottom: 16px">👋</div><div style="font-size: 17px; color: #000; font-weight: 600; margin-bottom: 6px">Legg til beboere først</div><div style="margin-bottom: 24px; color: #8e8e93">Du må legge til hvem som bor i kollektivet før du kan registrere bøter.</div><button class="btn-primary" style="display:inline-block" onclick="view=\'members\';render()">Gå til Beboere</button></div>';
   }
 
-  return '<div class="hero fade-in"><div class="hero-sub">' + monthNames[state.currentMonth.month] + ' ' + state.currentMonth.year + '</div><div class="hero-title">Oversikt</div></div>' +
+  return hero(month + (me ? ' · ' + esc(me.name) : ''), 'Oversikt') +
     '<div class="kasse-card fade-in"><div class="kasse-bg"></div><div class="kasse-label">Felleskasse</div><div class="kasse-amount" id="kasse-amount">' + total.toLocaleString('nb-NO') + ' kr</div><div class="kasse-sub"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>' + activeCount + ' aktive bøter denne måneden</div></div>' +
     '<div class="stat-row fade-in"><div class="stat"><div class="stat-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>Aktive bøter</div><div class="stat-val">' + activeCount + '</div></div><div class="stat"><div class="stat-label">♠ Jokere igjen</div><div class="stat-val">' + jokersLeft + '</div></div></div>' +
-    '<div class="fab-row fade-in"><button class="fab" onclick="openModal(\'addFine\')"><div class="fab-icon" style="background:#FF3B30"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><div class="fab-label">Ny bot</div><div class="fab-sub">Registrer brudd</div></button><button class="fab" onclick="openModal(\'earnJoker\')"><div class="fab-icon" style="background:#007AFF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="6"/><path d="M9 14l-2 7 5-3 5 3-2-7"/></svg></div><div class="fab-label">Logg husarbeid</div><div class="fab-sub">Tjen joker</div></button></div>' +
+    '<div class="fab-row fade-in"><button class="fab" onclick="openModal(\'addFine\')"><div class="fab-icon" style="background:#FF3B30">' + plusIcon + '</div><div class="fab-label">Ny bot</div><div class="fab-sub">Registrer brudd</div></button><button class="fab" onclick="openModal(\'earnJoker\')"><div class="fab-icon" style="background:#007AFF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="6"/><path d="M9 14l-2 7 5-3 5 3-2-7"/></svg></div><div class="fab-label">Logg husarbeid</div><div class="fab-sub">' + freeTasks + ' av 2 ledige denne uka</div></button></div>' +
     '<div class="section-head"><div class="section-title">Beboere</div></div><div class="list fade-in">' +
-    totals.map(m => '<div class="list-item"><div class="avatar" style="background:' + m.color + '">' + m.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title">' + m.name + '</div><div class="item-sub">' + m.activeFines + ' aktive <span class="pill ' + (m.jokers === 0 ? 'pill-empty' : 'pill-info') + '">♠ ' + m.jokers + '</span></div></div><div class="item-amount">' + m.total + ' kr</div></div>').join('') +
+    totals.map(m => '<div class="list-item">' + avatar(m) + '<div class="item-main"><div class="item-title">' + esc(m.name) + '</div><div class="item-sub">' + m.activeFines + ' aktive <span class="pill ' + (m.jokers === 0 ? 'pill-empty' : 'pill-info') + '">♠ ' + m.jokers + '</span></div></div><div class="item-amount">' + m.total + ' kr</div></div>').join('') +
     '</div>' +
-    (recent.length > 0 ? '<div class="section-head"><div class="section-title">Siste hendelser</div></div><div class="list fade-in">' +
-    recent.map(f => {
-      const m = state.members.find(x => x.id === f.memberId);
-      const r = state.rules.find(x => x.id === f.ruleId);
-      return '<div class="list-item"><div class="avatar" style="background:' + (m?.color || '#999') + '">' + (m?.name.charAt(0).toUpperCase() || '?') + '</div><div class="item-main"><div class="item-title">' + (r?.desc || 'Ukjent') + '</div><div class="item-sub">' + (m?.name || 'Ukjent') + ' · ' + fmt(f.date) + (f.usedJoker ? ' · joker' : '') + '</div></div>' +
-        (f.usedJoker ? '<div class="item-amount strike">' + f.amount + ' kr</div>' : '<div class="item-amount danger">' + f.amount + ' kr</div><button class="joker-btn" onclick="useJoker(' + f.id + ')" aria-label="Bruk joker"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-1 2-7 6-7 11a5 5 0 005 5c-1 0-2 1-2 2h8c0-1-1-2-2-2a5 5 0 005-5c0-5-6-9-7-11z"/></svg></button>') +
-        '</div>';
-    }).join('') + '</div>' : '') +
-    '<div class="action-card fade-in" onclick="openModal(\'closeMonth\')"><div class="action-icon" style="background:rgba(255,149,0,0.16); color:#FF9500"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 21V5a1 1 0 011-1h12l-3 4 3 4H6"/></svg></div><div class="action-text"><div class="action-title">Avslutt måneden</div><div class="action-sub">Logg innbetalinger og start ny måned</div></div><svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></div>';
+    (fines.length > 0 ? '<div class="section-head"><div class="section-title">Bøter denne måneden</div></div><div class="list fade-in">' + fines.map(fineRow).join('') + '</div>' : '') +
+    '<div class="action-card fade-in" onclick="openModal(\'closeMonth\')"><div class="action-icon" style="background:rgba(255,149,0,0.16); color:#FF9500"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 21V5a1 1 0 011-1h12l-3 4 3 4H6"/></svg></div><div class="action-text"><div class="action-title">Avslutt måneden</div><div class="action-sub">Logg innbetalinger og start ny måned</div></div>' + chevron + '</div>';
 }
 
 function renderRules() {
   const cats = [...new Set(state.rules.map(r => r.category))];
-  return '<div class="hero fade-in"><div class="hero-sub">' + state.rules.length + ' regler aktive</div><div class="hero-title">Regler</div></div>' +
-    cats.map(cat => '<div class="section-head"><div class="cat-label">' + cat + '</div></div><div class="list fade-in">' +
-      state.rules.filter(r => r.category === cat).map(r => '<div class="list-item no-avatar"><div class="item-main"><div class="item-title">' + r.desc + '</div></div><div class="item-amount danger">' + r.amount + ' kr</div><button class="joker-btn" style="background:rgba(255,59,48,0.12); color:#FF3B30" onclick="deleteRule(' + r.id + ')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button></div>').join('') +
+  return hero(state.rules.length + ' regler aktive', 'Regler') +
+    cats.map(cat => '<div class="section-head"><div class="cat-label">' + esc(cat) + '</div></div><div class="list fade-in">' +
+      state.rules.filter(r => r.category === cat).map(r => '<div class="list-item no-avatar"><div class="item-main"><div class="item-title">' + esc(r.desc) + '</div></div><div class="item-amount danger">' + r.amount + ' kr</div><button class="joker-btn" style="background:rgba(255,59,48,0.12); color:#FF3B30" onclick="deleteRule(' + r.id + ')">' + trashIcon + '</button></div>').join('') +
       '</div>').join('') +
-    '<div style="padding: 4px 20px 16px"><button class="fab" style="width:100%; flex-direction:row; align-items:center; gap:12px" onclick="openModal(\'addRule\')"><div class="fab-icon" style="background:#FF3B30"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><div><div class="fab-label">Legg til ny regel</div><div class="fab-sub">Velg kategori og beløp</div></div></button></div>' +
-    '<div class="section-head"><div class="cat-label">Joker-system</div></div><div class="list fade-in" style="padding: 14px 16px"><div style="font-size:14px; color:#3c3c43; line-height:1.5">Hver beboer starter måneden med <strong>1 joker</strong> som sletter en bot. Tjen 1 ekstra ved å støvsuge hele leiligheten eller vaske dusj og do grundig.</div></div>';
+    '<div style="padding: 4px 20px 16px"><button class="fab" style="width:100%; flex-direction:row; align-items:center; gap:12px" onclick="openModal(\'addRule\')"><div class="fab-icon" style="background:#FF3B30">' + plusIcon + '</div><div><div class="fab-label">Legg til ny regel</div><div class="fab-sub">Velg kategori og beløp</div></div></button></div>' +
+    '<div class="section-head"><div class="cat-label">Joker-system</div></div><div class="list fade-in" style="padding: 14px 16px"><div style="font-size:14px; color:#3c3c43; line-height:1.5">Hver beboer starter måneden med <strong>1 joker</strong> som sletter en bot. Tjen flere ved å <strong>støvsuge og tørke støv i hele leiligheten</strong> eller <strong>vaske dusj og do grundig</strong>. Hver oppgave kan gjøres <strong>én gang per uke</strong> (mandag–søndag), uansett hvem som gjør den. Ubrukte jokere forsvinner når måneden avsluttes.</div></div>';
 }
 
 function renderMembers() {
   const totals = getMemberTotals();
-  return '<div class="hero fade-in"><div class="hero-sub">' + state.members.length + ' i kollektivet</div><div class="hero-title">Beboere</div></div>' +
+  const me = currentMe();
+  return hero(state.members.length + ' i kollektivet', 'Beboere') +
     (totals.length === 0 ? '<div class="empty">Ingen beboere lagt til ennå.</div>' :
-      '<div class="list fade-in">' + totals.map(m => '<div class="list-item"><div class="avatar" style="background:' + m.color + '; width:44px; height:44px; font-size:17px">' + m.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title" style="font-size:17px">' + m.name + '</div><div class="item-sub">' + m.jokers + ' jokere · ' + m.activeFines + ' aktive bøter</div></div><button class="joker-btn" style="background:rgba(255,59,48,0.12); color:#FF3B30" onclick="deleteMember(' + m.id + ')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button></div>').join('') + '</div>') +
-    '<div style="padding: 4px 20px"><button class="fab" style="width:100%; flex-direction:row; align-items:center; gap:12px" onclick="openModal(\'addMember\')"><div class="fab-icon" style="background:#FF3B30"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><div><div class="fab-label">Legg til beboer</div><div class="fab-sub">Skriv inn navn</div></div></button></div>';
+      '<div class="list fade-in">' + totals.map(m => '<div class="list-item">' + avatar(m, 44) + '<div class="item-main"><div class="item-title" style="font-size:17px">' + esc(m.name) + (me && me.id === m.id ? ' <span class="pill pill-info">deg</span>' : '') + '</div><div class="item-sub">' + m.jokers + ' jokere · ' + m.activeFines + ' aktive bøter</div></div><button class="joker-btn" style="background:rgba(255,59,48,0.12); color:#FF3B30" onclick="deleteMember(' + m.id + ')">' + trashIcon + '</button></div>').join('') + '</div>') +
+    '<div style="padding: 4px 20px 16px"><button class="fab" style="width:100%; flex-direction:row; align-items:center; gap:12px" onclick="openModal(\'addMember\')"><div class="fab-icon" style="background:#FF3B30">' + plusIcon + '</div><div><div class="fab-label">Legg til beboer</div><div class="fab-sub">Skriv inn navn</div></div></button></div>' +
+    '<div class="section-head"><div class="cat-label">Denne telefonen</div></div><div class="list fade-in">' +
+      '<div class="list-item no-avatar" onclick="switchMe()"><div class="item-main"><div class="item-title">Du er ' + esc(me ? me.name : 'ukjent') + '</div><div class="item-sub">Trykk for å bytte</div></div>' + chevron + '</div>' +
+      '<div class="list-item no-avatar" onclick="shareLink()"><div class="item-main"><div class="item-title">Del appen med kollektivet</div><div class="item-sub">Send lenken, så kommer de rett inn uten å skrive kode</div></div>' + chevron + '</div>' +
+    '</div>';
+}
+
+function deletedRow(d) {
+  return '<div class="archive-row"><div class="log-icon">' + trashIcon + '</div><div class="item-main"><div class="item-title" style="font-size:14px">' + esc(d.by || 'Ukjent') + ' slettet «' + esc(d.desc) + '»</div><div class="item-sub">' + esc(d.member) + ' · ' + d.amount + ' kr · ' + fmtDate(d.at) + '</div></div></div>';
 }
 
 function renderArchive() {
-  const sorted = [...state.archive].sort((a,b) => (b.year*12+b.month) - (a.year*12+a.month));
-  return '<div class="hero fade-in"><div class="hero-sub">' + state.archive.length + ' avsluttet' + (state.archive.length === 1 ? '' : 'e') + ' måned' + (state.archive.length === 1 ? '' : 'er') + '</div><div class="hero-title">Arkiv</div></div>' +
-    (sorted.length === 0 ? '<div class="empty">Ingen avsluttede måneder ennå. Avslutt en måned fra Hjem for å arkivere den.</div>' :
-      sorted.map(a => '<div class="archive-summary fade-in"><div class="archive-head"><div class="archive-month">' + monthNames[a.month] + ' ' + a.year + '</div><div class="archive-kasse">' + a.kasse + ' kr</div></div>' +
-        a.summary.map(s => { const m = a.members.find(x => x.id === s.memberId); return '<div class="archive-row"><div class="avatar" style="background:' + (m?.color || '#999') + '; width:32px; height:32px; font-size:13px">' + s.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title" style="font-size:14px">' + s.name + '</div><div class="item-sub">' + s.fines + ' bøter · ' + s.jokerUsed + ' joker brukt</div></div><span class="pill pill-success">' + s.total + ' kr · Betalt</span></div>'; }).join('') +
+  const deletedNow = state.fines.filter(f => f.deletedAt)
+    .sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt))
+    .map(f => ({ desc: f.desc, member: f.memberName, amount: f.amount, by: f.deletedBy, at: f.deletedAt }));
+  const arch = state.archive;
+  const n = arch.length;
+  return hero(n + ' avsluttet' + (n === 1 ? '' : 'e') + ' måned' + (n === 1 ? '' : 'er'), 'Arkiv') +
+    (deletedNow.length ? '<div class="archive-summary fade-in"><div class="archive-head"><div class="archive-month">' + monthNames[state.currentMonth.month] + ' ' + state.currentMonth.year + '</div><span class="pill pill-empty">Pågår</span></div><div class="archive-label">Slettede bøter</div>' + deletedNow.map(deletedRow).join('') + '</div>' : '') +
+    (n === 0 ? (deletedNow.length ? '' : '<div class="empty">Ingen avsluttede måneder ennå. Avslutt en måned fra Hjem for å arkivere den.</div>') :
+      arch.map(a => '<div class="archive-summary fade-in"><div class="archive-head"><div class="archive-month">' + monthNames[a.month] + ' ' + a.year + '</div><div class="archive-kasse">' + a.kasse + ' kr</div></div>' +
+        (a.summary || []).map(s => { const m = (a.members || []).find(x => x.id === s.memberId) || { name: s.name }; return '<div class="archive-row">' + avatar(m, 32) + '<div class="item-main"><div class="item-title" style="font-size:14px">' + esc(s.name) + '</div><div class="item-sub">' + s.fines + ' bøter · ' + s.jokerUsed + ' joker brukt</div></div><span class="pill pill-success">' + s.total + ' kr · Betalt</span></div>'; }).join('') +
+        ((a.deleted && a.deleted.length) ? '<div class="archive-label">Slettede bøter</div>' + a.deleted.map(deletedRow).join('') : '') +
         '</div>').join(''));
 }
 
-function render() {
+function render(keepScroll) {
   const el = document.getElementById('content');
-  el.scrollTop = 0;
-  if (view === 'home') el.innerHTML = renderHome();
-  else if (view === 'rules') el.innerHTML = renderRules();
-  else if (view === 'members') el.innerHTML = renderMembers();
-  else if (view === 'archive') el.innerHTML = renderArchive();
+  const top = el.scrollTop;
+  document.querySelector('.tabbar').style.display = setup ? 'none' : '';
+  let html;
+  if (setup === 'kode') html = renderKode();
+  else if (!state) html = hero('Botkassa', 'Henter…') + (problem ? '' : '<div class="empty">Henter data fra kollektivet…</div>');
+  else if (setup === 'import') html = renderImport();
+  else if (setup === 'meg') html = renderMeg();
+  else if (view === 'home') html = renderHome();
+  else if (view === 'rules') html = renderRules();
+  else if (view === 'members') html = renderMembers();
+  else html = renderArchive();
+  el.innerHTML = problemBanner() + html;
+  el.scrollTop = keepScroll ? top : 0;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === view));
-  saveState();
 }
 
+// ---------- Handlinger ----------
+
 function useJoker(fineId) {
-  const fine = state.fines.find(f => f.id === fineId);
-  if (!fine) return;
-  const j = state.jokers[fine.memberId] || { available: 0, earned: 0 };
-  if (j.available + j.earned === 0) { toast('Ingen jokere igjen'); return; }
+  const f = state.fines.find(x => x.id === fineId);
+  if (!f) return;
+  const m = getMemberTotals().find(x => x.id === f.memberId);
+  if (!m || m.jokers <= 0) { toast('Ingen jokere igjen'); return; }
   haptic();
-  if (j.earned > 0) j.earned -= 1; else j.available -= 1;
-  state.jokers[fine.memberId] = j;
-  fine.usedJoker = true;
-  render();
-  toast('Joker brukt — bot slettet', 'success');
+  act('bk_use_joker', { p_fine: fineId }, 'Joker brukt');
+}
+
+function openFine(id) {
+  const f = state.fines.find(x => x.id === id);
+  if (!f || f.deletedAt) return;
+  haptic();
+  const m = getMemberTotals().find(x => x.id === f.memberId);
+  const jokers = m ? m.jokers : 0;
+  document.getElementById('modal-root').innerHTML = modalStart(esc(f.desc)) +
+    '<div class="sheet-meta">' + esc(f.memberName) + ' · ' + f.amount + ' kr · ' + fmt(f.date) + (f.createdBy ? '<br>Registrert av ' + esc(f.createdBy) : '') + (f.usedJoker ? '<br>Joker er brukt på denne boten' : '') + '</div>' +
+    '<div class="sheet-actions">' +
+      (f.usedJoker ? '' : '<button class="btn-blue" onclick="useJoker(' + f.id + ')"' + (jokers <= 0 ? ' disabled' : '') + '>Bruk joker (' + esc(f.memberName) + ' har ' + jokers + ' igjen)</button>') +
+      '<button class="btn-danger" onclick="deleteFine(' + f.id + ')">Slett bot (feilregistrert)</button>' +
+    '</div>' +
+    '<div class="sheet-note">Slettingen blir logget i Arkiv med navnet ditt.</div></div></div>';
+}
+
+function deleteFine(id) {
+  const f = state.fines.find(x => x.id === id);
+  const me = currentMe();
+  if (!f || !me) return;
+  if (!confirm('Slette «' + f.desc + '» for ' + f.memberName + '? Det blir logget i Arkiv at ' + me.name + ' slettet den.')) return;
+  act('bk_delete_fine', { p_id: id, p_by: me.name }, 'Bot slettet');
 }
 
 function deleteRule(id) {
   if (!confirm('Slette denne regelen?')) return;
-  state.rules = state.rules.filter(r => r.id !== id);
-  render();
+  act('bk_remove_rule', { p_id: id }, 'Regel slettet');
 }
 
 function deleteMember(id) {
-  if (!confirm('Slette beboer? Bøtene deres blir også fjernet.')) return;
-  state.members = state.members.filter(m => m.id !== id);
-  state.fines = state.fines.filter(f => f.memberId !== id);
-  delete state.jokers[id];
-  render();
+  if (!confirm('Slette beboer? Bøtene deres denne måneden blir slettet og logget i Arkiv.')) return;
+  act('bk_remove_member', { p_id: id, p_by: currentMe()?.name || null }, 'Beboer fjernet');
 }
 
 function closeModal() {
@@ -326,44 +576,56 @@ function closeModal() {
   }
 }
 
+function modalStart(title) {
+  return '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">' + title + '</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>';
+}
+
 function openModal(type) {
   haptic();
   const root = document.getElementById('modal-root');
   if (type === 'addFine') {
     if (state.members.length === 0) { toast('Legg til beboere først'); return; }
     if (state.rules.length === 0) { toast('Legg til regler først'); return; }
-    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Registrer bot</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
-      '<div class="field"><div class="field-label">HVEM?</div><select class="field-select" id="m-member"><option value="">Velg beboer...</option>' + state.members.map(m => '<option value="' + m.id + '">' + m.name + '</option>').join('') + '</select></div>' +
-      '<div class="field"><div class="field-label">HVA?</div><select class="field-select" id="m-rule"><option value="">Velg regel...</option>' + state.rules.map(r => '<option value="' + r.id + '">' + r.category + ' — ' + r.desc + ' (' + r.amount + ' kr)</option>').join('') + '</select></div>' +
+    root.innerHTML = modalStart('Registrer bot') +
+      '<div class="field"><div class="field-label">HVEM?</div><select class="field-select" id="m-member"><option value="">Velg beboer...</option>' + state.members.map(m => '<option value="' + m.id + '">' + esc(m.name) + '</option>').join('') + '</select></div>' +
+      '<div class="field"><div class="field-label">HVA?</div><select class="field-select" id="m-rule"><option value="">Velg regel...</option>' + state.rules.map(r => '<option value="' + r.id + '">' + esc(r.category) + ' — ' + esc(r.desc) + ' (' + r.amount + ' kr)</option>').join('') + '</select></div>' +
       '<div class="modal-btn-row"><button class="btn-primary" onclick="saveFine()">Lagre bot</button></div></div></div>';
   } else if (type === 'earnJoker') {
-    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Logg husarbeid</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
-      '<div class="info-banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>Tjen 1 ekstra joker (maks 1 per måned). De andre bør bekrefte at jobben er gjort.</span></div>' +
-      '<div class="field"><div class="field-label">HVEM?</div><select class="field-select" id="m-member">' + state.members.map(m => { const j = state.jokers[m.id] || { earned: 0 }; return '<option value="' + m.id + '"' + (j.earned >= 1 ? ' disabled' : '') + '>' + m.name + (j.earned >= 1 ? ' (har allerede tjent)' : '') + '</option>'; }).join('') + '</select></div>' +
-      '<div class="field"><div class="field-label">HVA BLE GJORT?</div><select class="field-select" id="m-task"><option>Støvsugd og tørket støv i hele leiligheten</option><option>Vasket dusj og do grundig</option></select></div>' +
-      '<div class="modal-btn-row"><button class="btn-primary" onclick="saveJoker()">Registrer</button></div></div></div>';
+    if (state.members.length === 0) { toast('Legg til beboere først'); return; }
+    const me = currentMe();
+    const taken = state.weekTaken || {};
+    const free = JOKER_TASKS.filter(t => !taken[t]);
+    root.innerHTML = modalStart('Logg husarbeid') +
+      '<div class="info-banner">' + infoIcon + '<span>Hver oppgave kan gjøres én gang per uke (mandag–søndag), uansett hvem som gjør den. De andre bør bekrefte at jobben er gjort.</span></div>' +
+      (free.length === 0
+        ? '<div class="setup-text">Begge oppgavene er tatt denne uka:<br>' + JOKER_TASKS.map(t => '• ' + esc(t) + ' (' + esc(taken[t]) + ')').join('<br>') + '<br><br>Ny uke starter mandag.</div><div class="modal-btn-row"><button class="btn-primary" onclick="closeModal()">OK</button></div>'
+        : '<div class="field"><div class="field-label">HVEM?</div><select class="field-select" id="m-member">' + state.members.map(m => '<option value="' + m.id + '"' + (me && me.id === m.id ? ' selected' : '') + '>' + esc(m.name) + '</option>').join('') + '</select></div>' +
+          '<div class="field"><div class="field-label">HVA BLE GJORT?</div><select class="field-select" id="m-task">' + JOKER_TASKS.map(t => '<option value="' + esc(t) + '"' + (taken[t] ? ' disabled' : '') + (t === free[0] ? ' selected' : '') + '>' + esc(t) + (taken[t] ? ' (tatt av ' + esc(taken[t]) + ')' : '') + '</option>').join('') + '</select></div>' +
+          '<div class="modal-btn-row"><button class="btn-primary" onclick="saveJoker()">Registrer</button></div>') +
+      '</div></div>';
   } else if (type === 'addMember') {
-    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Ny beboer</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
+    root.innerHTML = modalStart('Ny beboer') +
       '<div class="field"><div class="field-label">NAVN</div><input class="field-input" id="m-name" placeholder="F.eks. Marius" autofocus></div>' +
       '<div class="modal-btn-row"><button class="btn-primary" onclick="saveMember()">Legg til</button></div></div></div>';
     setTimeout(() => { const i = document.getElementById('m-name'); if (i) i.focus(); }, 100);
   } else if (type === 'addRule') {
-    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Ny regel</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
+    root.innerHTML = modalStart('Ny regel') +
       '<div class="field"><div class="field-label">KATEGORI</div><input class="field-input" id="m-cat" placeholder="F.eks. Kjøkken"></div>' +
       '<div class="field"><div class="field-label">BESKRIVELSE</div><input class="field-input" id="m-desc" placeholder="Hva er bruddet?"></div>' +
-      '<div class="field"><div class="field-label">BELØP (KR)</div><input class="field-input" id="m-amt" type="number" inputmode="numeric" placeholder="75"></div>' +
+      '<div class="field"><div class="field-label">BELØP (KR)</div><input class="field-input" id="m-amt" type="number" inputmode="numeric" placeholder="40"></div>' +
       '<div class="modal-btn-row"><button class="btn-primary" onclick="saveRule()">Lagre regel</button></div></div></div>';
   } else if (type === 'closeMonth') {
     const totals = getMemberTotals();
     const total = totalKasse();
+    paidIds = new Set();
     if (total === 0 && totals.every(m => m.total === 0)) {
       closeModal();
-      if (confirm('Ingen bøter denne måneden. Vil du fortsatt gå til neste måned?')) doCloseMonth([]);
+      if (confirm('Ingen bøter denne måneden. Vil du fortsatt gå til neste måned?')) act('bk_close_month', { p_period: state.period, p_paid: [] }, 'Måneden er arkivert');
       return;
     }
-    root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-handle"></div><div class="modal-head"><div class="modal-title">Avslutt ' + monthNames[state.currentMonth.month] + '</div><button class="modal-close" onclick="closeModal()">Avbryt</button></div>' +
-      '<div class="info-banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>Marker hvem som har betalt. Når alle er betalt, kan du arkivere måneden. Alle får 1 ny joker.</span></div>' +
-      '<div class="pay-list">' + totals.map(m => '<div class="pay-row"><div class="avatar" style="background:' + m.color + '">' + m.name.charAt(0).toUpperCase() + '</div><div class="item-main"><div class="item-title">' + m.name + '</div><div class="item-sub">' + m.activeFines + ' bøter</div></div><div class="item-amount" style="margin-right:10px">' + m.total + ' kr</div><div class="toggle ' + (m.total === 0 ? 'on checkbox-disabled' : '') + '" data-pay="' + m.id + '" onclick="togglePay(' + m.id + ')"></div></div>').join('') + '</div>' +
+    root.innerHTML = modalStart('Avslutt ' + monthNames[state.currentMonth.month]) +
+      '<div class="info-banner">' + infoIcon + '<span>Marker hvem som har betalt. Når alle er betalt, kan du arkivere måneden. Alle får 1 ny joker.</span></div>' +
+      '<div class="pay-list">' + totals.map(m => '<div class="pay-row">' + avatar(m) + '<div class="item-main"><div class="item-title">' + esc(m.name) + '</div><div class="item-sub">' + m.activeFines + ' bøter</div></div><div class="item-amount" style="margin-right:10px">' + m.total + ' kr</div><div class="toggle ' + (m.total === 0 ? 'on checkbox-disabled' : '') + '" data-pay="' + m.id + '" onclick="togglePay(' + m.id + ')"></div></div>').join('') + '</div>' +
       '<div class="total-row"><div class="total-label">Totalt i kassa</div><div class="total-amount">' + total + ' kr</div></div>' +
       '<div class="modal-btn-row"><button class="btn-primary" id="confirm-close" onclick="confirmClose()">Godkjenn og arkiver</button></div></div></div>';
     setTimeout(() => updateCloseBtn(), 50);
@@ -387,74 +649,57 @@ function updateCloseBtn() {
 function confirmClose() {
   const totals = getMemberTotals();
   if (!totals.every(m => m.total === 0 || paidIds.has(m.id))) return;
-  doCloseMonth([...paidIds]);
+  const paid = [...paidIds];
   paidIds = new Set();
-}
-function doCloseMonth(paidArr) {
-  const totals = getMemberTotals();
-  state.archive.push({
-    id: 'arch-' + Date.now(),
-    year: state.currentMonth.year, month: state.currentMonth.month,
-    closedDate: new Date().toISOString(),
-    members: JSON.parse(JSON.stringify(state.members)),
-    summary: totals.map(m => ({ memberId: m.id, name: m.name, fines: m.activeFines, jokerUsed: m.jokerUsedCount, total: m.total, paid: m.total === 0 || paidArr.includes(m.id) })),
-    kasse: totalKasse(),
-  });
-  state.fines = [];
-  state.jokerLog = [];
-  const newJokers = {};
-  state.members.forEach(m => { newJokers[m.id] = { available: 1, earned: 0 }; });
-  state.jokers = newJokers;
-  let nm = state.currentMonth.month + 1, ny = state.currentMonth.year;
-  if (nm > 11) { nm = 0; ny += 1; }
-  state.currentMonth = { year: ny, month: nm };
-  closeModal();
-  render();
-  toast('Måneden er arkivert', 'success');
+  act('bk_close_month', { p_period: state.period, p_paid: paid }, 'Måneden er arkivert');
 }
 
 function saveFine() {
-  const memberId = parseInt(document.getElementById('m-member').value);
-  const ruleId = parseInt(document.getElementById('m-rule').value);
+  const memberId = Number(document.getElementById('m-member').value);
+  const ruleId = Number(document.getElementById('m-rule').value);
   if (!memberId || !ruleId) { toast('Velg beboer og regel'); return; }
-  const rule = state.rules.find(r => r.id === ruleId);
-  state.fines.push({ id: Date.now(), memberId, ruleId, amount: rule.amount, date: new Date().toISOString(), usedJoker: false });
-  closeModal(); render(); toast('Bot registrert', 'success');
+  act('bk_add_fine', { p_member: memberId, p_rule: ruleId, p_by: currentMe()?.name || null }, 'Bot registrert');
 }
 function saveJoker() {
-  const memberId = parseInt(document.getElementById('m-member').value);
+  const memberId = Number(document.getElementById('m-member').value);
   const task = document.getElementById('m-task').value;
   if (!memberId) { toast('Velg beboer'); return; }
-  const j = state.jokers[memberId] || { available: 1, earned: 0 };
-  if (j.earned >= 1) { toast('Allerede tjent denne måneden'); return; }
-  state.jokers[memberId] = { ...j, earned: j.earned + 1 };
-  state.jokerLog.push({ id: Date.now(), memberId, task, date: new Date().toISOString() });
-  closeModal(); render(); toast('Joker tjent', 'success');
+  act('bk_earn_joker', { p_member: memberId, p_task: task, p_by: currentMe()?.name || null }, 'Joker tjent');
 }
 function saveMember() {
   const name = document.getElementById('m-name').value.trim();
   if (!name) { toast('Skriv inn navn'); return; }
-  const id = Date.now();
-  state.members.push({ id, name, color: memberColors[state.members.length % memberColors.length] });
-  state.jokers[id] = { available: 1, earned: 0 };
-  closeModal(); render(); toast('Beboer lagt til', 'success');
+  act('bk_add_member', { p_name: name }, 'Beboer lagt til');
 }
 function saveRule() {
   const cat = document.getElementById('m-cat').value.trim();
   const desc = document.getElementById('m-desc').value.trim();
   const amt = parseInt(document.getElementById('m-amt').value);
   if (!cat || !desc || !amt) { toast('Fyll ut alle felt'); return; }
-  state.rules.push({ id: Date.now(), category: cat, desc, amount: amt });
-  closeModal(); render(); toast('Regel lagt til', 'success');
+  act('bk_add_rule', { p_category: cat, p_desc: desc, p_amount: amt }, 'Regel lagt til');
 }
 
-document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => { haptic(); view = t.dataset.tab; render(); }));
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => { if (setup) return; haptic(); view = t.dataset.tab; render(); }));
 
 if ('serviceWorker' in navigator) {
+  // Last siden på nytt når en ny versjon tar over, så alle kjører samme versjon
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); });
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
 
+// Kode kan komme fra delt lenke: .../Botkassa/#kode=xxxx
+const hashKode = location.hash.match(/kode=([^&]+)/);
+if (hashKode) {
+  const k = decodeURIComponent(hashKode[1]).trim().toLowerCase();
+  if (k !== lsGet(KODE_KEY)) { lsSet(KODE_KEY, k); lsDel(CACHE_KEY); }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+const cached = lsGet(CACHE_KEY);
+if (cached && lsGet(KODE_KEY)) { try { state = toState(JSON.parse(cached)); lastJson = cached; } catch(e) {} }
+decideSetup();
 render();
+if (lsGet(KODE_KEY)) { poll(); startPolling(); }
 </script>
 </body>
 </html>
